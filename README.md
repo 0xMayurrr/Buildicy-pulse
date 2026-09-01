@@ -19,26 +19,6 @@
 
 ---
 
-### 🤫 WHAT IS BUILDICY PULSE?
-
-Buildicy Pulse is the high-octane **Brutalist + Maximalist Financial Control Engine** engineered for elite business ops, instant UPI settlements, and real-time revenue analytics.
-
-- 💎 **Zero Cap Wealth Tracking**: Real-time project cashflows, instant UPI QR deep-linking, and live P&L reporting.
-- ⚡ **9999-Bit Security Vibes**: Powered by Supabase Realtime DB, strict RLS policies, and encrypted auth.
-- 🎨 **Royal Purple Brutalist UI**: Pure obsidian dark mode paired with high-contrast royal purple `#7C3AED` aesthetic.
-
----
-
-### 🛠️ TECH STACK
-
-- **Core Framework**: React Native + Expo SDK 54
-- **Routing**: Expo Router (File-based navigation)
-- **Database & Auth**: Supabase Realtime PostgreSQL + RLS
-- **State & PDF Generation**: `expo-print` + `expo-sharing`
-- **Updates Engine**: EAS Over-The-Air (OTA) Channel Delivery
-
----
-
 ### 🔐 ACCESS & COMPLIANCE
 
 ```
@@ -50,7 +30,7 @@ Buildicy Pulse is the high-octane **Brutalist + Maximalist Financial Control Eng
 ```
 
 > [!IMPORTANT]
-> If you are not an authorized engineer or team member of **Buildicy Inc.**, close this repository immediately. 
+> If you are not an authorized engineer or team member of **Buildicy.com.**, close this repository immediately. 
 
 ---
 
