@@ -1,0 +1,16 @@
+# EAS Build ignore patterns
+node_modules
+.expo
+.expo-shared
+.next
+dist
+build
+web-build
+*.log
+*.tmp
+.DS_Store
+
+# Ignore parent/sibling desktop environments
+../**
+venv
+.venv
