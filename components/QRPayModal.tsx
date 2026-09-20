@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -11,11 +11,13 @@ import {
   ScrollView,
   Dimensions,
   Platform,
+  Animated,
+  Vibration,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { parseUpiQr, launchUpiApp, ParsedUpi } from '../lib/upi';
-import { supabase } from '../lib/supabase';
+import { supabase, subscribeToRealtimeChanges } from '../lib/supabase';
 import { formatCurrency, formatFullCurrency, COLORS } from '../data/demo';
 import { PaymentAppBadge } from './PaymentAppBadges';
 
@@ -53,10 +55,39 @@ export function QRPayModal({ visible, onClose, onSuccess }: Props) {
   const [membersList, setMembersList] = useState<any[]>([]);
   const [saving, setSaving] = useState(false);
 
+  // Animated Laser Beam Value
+  const scanAnim = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    if (visible && step === 'scan') {
+      const laserAnimation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(scanAnim, {
+            toValue: 1,
+            duration: 1800,
+            useNativeDriver: true,
+          }),
+          Animated.timing(scanAnim, {
+            toValue: 0,
+            duration: 1800,
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      laserAnimation.start();
+      return () => laserAnimation.stop();
+    }
+  }, [visible, step]);
+
   useEffect(() => {
     if (visible) {
       resetModalState();
       fetchDropdownOptions();
+      const unsubscribe = subscribeToRealtimeChanges(() => {
+        console.log('[REALTIME UPDATE] QR Modal dropdown data update...');
+        fetchDropdownOptions();
+      });
+      return () => unsubscribe();
     }
   }, [visible]);
 
@@ -89,6 +120,11 @@ export function QRPayModal({ visible, onClose, onSuccess }: Props) {
   // Handle scanned barcode / QR data
   const handleBarcodeScanned = ({ data }: { data: string }) => {
     if (step !== 'scan' || !data) return;
+    try {
+      Vibration.vibrate(100);
+    } catch (err) {
+      // Ignore vibration error on unsupported platforms
+    }
     console.log('[QR SCANNER SUCCESS] Scanned raw QR data:', data);
     processParsedQr(data);
   };
@@ -225,7 +261,7 @@ export function QRPayModal({ visible, onClose, onSuccess }: Props) {
           </TouchableOpacity>
         </View>
 
-        {/* STEP 1: ENHANCED CAMERA SCANNER VIEW */}
+        {/* STEP 1: ENHANCED CYBER CAMERA SCANNER VIEW */}
         {step === 'scan' && (
           <View style={styles.stepContainer}>
             {permission?.granted ? (
@@ -236,17 +272,45 @@ export function QRPayModal({ visible, onClose, onSuccess }: Props) {
                   barcodeScannerSettings={{ barcodeTypes: ['qr'] }}
                   onBarcodeScanned={handleBarcodeScanned}
                 />
-                {/* Viewfinder Frame with Laser Scan */}
+                {/* Viewfinder Frame with Animated Laser Scan */}
                 <View style={styles.viewfinderOverlay}>
+                  {/* Cyber Scanner Header HUD */}
+                  <View style={styles.hudHeaderBadge}>
+                    <View style={styles.hudLiveDot} />
+                    <Text style={styles.hudHeaderText}>CYBER SCANNER ACTIVE • TARGET UPI QR</Text>
+                  </View>
+
                   <View style={styles.scanFrame}>
                     <View style={[styles.corner, styles.topLeft]} />
                     <View style={[styles.corner, styles.topRight]} />
                     <View style={[styles.corner, styles.bottomLeft]} />
                     <View style={[styles.corner, styles.bottomRight]} />
-                    <View style={styles.scanLaser} />
+
+                    {/* Center Crosshair HUD */}
+                    <View style={styles.crosshairCenter}>
+                      <Ionicons name="add-outline" size={24} color="rgba(192, 132, 252, 0.6)" />
+                    </View>
+
+                    {/* Animated Neon Sweep Laser */}
+                    <Animated.View
+                      style={[
+                        styles.scanLaser,
+                        {
+                          transform: [
+                            {
+                              translateY: scanAnim.interpolate({
+                                inputRange: [0, 1],
+                                outputRange: [4, 210],
+                              }),
+                            },
+                          ],
+                        },
+                      ]}
+                    />
                   </View>
+
                   <View style={styles.cameraActionsRow}>
-                    <Text style={styles.cameraTip}>ALIGN UPI QR CODE INSIDE FRAME</Text>
+                    <Text style={styles.cameraTip}>CENTER MERCHANTS UPI QR CODE</Text>
                     <TouchableOpacity
                       style={[styles.torchBtn, torch && styles.activeTorchBtn]}
                       onPress={() => setTorch(!torch)}
@@ -606,31 +670,68 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  scanFrame: {
-    width: 220,
-    height: 220,
-    position: 'relative',
-    justifyContent: 'center',
+  hudHeaderBadge: {
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
+    backgroundColor: 'rgba(11, 15, 23, 0.85)',
+    borderWidth: 1.5,
+    borderColor: '#06B6D4',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 20,
+    marginBottom: 20,
+  },
+  hudLiveDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#06B6D4',
+  },
+  hudHeaderText: {
+    fontSize: 9,
+    fontWeight: '900',
+    color: '#38BDF8',
+    letterSpacing: 1.5,
+  },
+
+  scanFrame: {
+    width: 230,
+    height: 230,
+    position: 'relative',
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
+    backgroundColor: 'rgba(124, 58, 237, 0.05)',
+  },
+  crosshairCenter: {
+    position: 'absolute',
+    top: '50%',
+    left: '50%',
+    marginTop: -12,
+    marginLeft: -12,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   corner: {
     position: 'absolute',
-    width: 28,
-    height: 28,
-    borderColor: '#7C3AED',
+    width: 32,
+    height: 32,
+    borderColor: '#A855F7',
   },
-  topLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4 },
-  topRight: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4 },
-  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4 },
-  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4 },
+  topLeft: { top: 0, left: 0, borderTopWidth: 4, borderLeftWidth: 4, borderColor: '#06B6D4' },
+  topRight: { top: 0, right: 0, borderTopWidth: 4, borderRightWidth: 4, borderColor: '#A855F7' },
+  bottomLeft: { bottom: 0, left: 0, borderBottomWidth: 4, borderLeftWidth: 4, borderColor: '#A855F7' },
+  bottomRight: { bottom: 0, right: 0, borderBottomWidth: 4, borderRightWidth: 4, borderColor: '#06B6D4' },
   scanLaser: {
     width: '100%',
-    height: 3,
-    backgroundColor: '#C084FC',
-    shadowColor: '#8B5CF6',
+    height: 4,
+    backgroundColor: '#38BDF8',
+    borderRadius: 2,
+    shadowColor: '#06B6D4',
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 1,
-    shadowRadius: 8,
+    shadowRadius: 10,
+    elevation: 8,
   },
   cameraActionsRow: {
     flexDirection: 'row',

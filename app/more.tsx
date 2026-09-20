@@ -46,6 +46,7 @@ export default function MoreMinimalGrid() {
   const [isSettingsModalOpen, setIsSettingsModalOpen] = useState(false);
 
   // Client Form State
+  const [isClientFormOpen, setIsClientFormOpen] = useState(false);
   const [editingClientId, setEditingClientId] = useState<string | null>(null);
   const [clientName, setClientName] = useState('');
   const [clientCompany, setClientCompany] = useState('');
@@ -53,10 +54,12 @@ export default function MoreMinimalGrid() {
   const [clientPhone, setClientPhone] = useState('');
 
   // Member Form State
+  const [isMemberFormOpen, setIsMemberFormOpen] = useState(false);
   const [editingMemberId, setEditingMemberId] = useState<string | null>(null);
   const [memberName, setMemberName] = useState('');
   const [memberRole, setMemberRole] = useState('');
   const [memberAvatar, setMemberAvatar] = useState('👨‍💻');
+  const [memberHourlyRate, setMemberHourlyRate] = useState('');
 
   // Invoice Form State
   const [invClient, setInvClient] = useState('');
@@ -188,6 +191,7 @@ export default function MoreMinimalGrid() {
     setClientCompany('');
     setClientEmail('');
     setClientPhone('');
+    setIsClientFormOpen(true);
     setIsClientModalOpen(true);
   };
 
@@ -197,6 +201,7 @@ export default function MoreMinimalGrid() {
     setClientCompany(c.company);
     setClientEmail(c.email || '');
     setClientPhone(c.phone || '');
+    setIsClientFormOpen(true);
     setIsClientModalOpen(true);
   };
 
@@ -219,7 +224,7 @@ export default function MoreMinimalGrid() {
         await supabase.from('clients').insert(payload);
         Alert.alert('Success', 'Client added!');
       }
-      setIsClientModalOpen(false);
+      setIsClientFormOpen(false);
       fetchData();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to save client');
@@ -235,7 +240,7 @@ export default function MoreMinimalGrid() {
         style: 'destructive',
         onPress: async () => {
           await supabase.from('clients').delete().eq('id', editingClientId);
-          setIsClientModalOpen(false);
+          setIsClientFormOpen(false);
           fetchData();
         },
       },
@@ -248,6 +253,8 @@ export default function MoreMinimalGrid() {
     setMemberName('');
     setMemberRole('');
     setMemberAvatar('👨‍💻');
+    setMemberHourlyRate('');
+    setIsMemberFormOpen(true);
     setIsMemberModalOpen(true);
   };
 
@@ -256,6 +263,8 @@ export default function MoreMinimalGrid() {
     setMemberName(m.name);
     setMemberRole(m.role);
     setMemberAvatar(m.avatar || '👨‍💻');
+    setMemberHourlyRate(m.hourly_rate ? String(m.hourly_rate) : '');
+    setIsMemberFormOpen(true);
     setIsMemberModalOpen(true);
   };
 
@@ -264,11 +273,14 @@ export default function MoreMinimalGrid() {
       Alert.alert('Error', 'Please enter member name and role');
       return;
     }
-    const payload = {
+    const payload: any = {
       name: memberName.trim(),
       role: memberRole.trim(),
       avatar: memberAvatar || '👨‍💻',
     };
+    if (memberHourlyRate) {
+      payload.hourly_rate = parseFloat(memberHourlyRate) || 0;
+    }
     try {
       if (editingMemberId) {
         await supabase.from('members').update(payload).eq('id', editingMemberId);
@@ -277,7 +289,7 @@ export default function MoreMinimalGrid() {
         await supabase.from('members').insert(payload);
         Alert.alert('Success', 'Team member added!');
       }
-      setIsMemberModalOpen(false);
+      setIsMemberFormOpen(false);
       fetchData();
     } catch (err: any) {
       Alert.alert('Error', err.message || 'Failed to save member');
@@ -293,7 +305,7 @@ export default function MoreMinimalGrid() {
         style: 'destructive',
         onPress: async () => {
           await supabase.from('members').delete().eq('id', editingMemberId);
-          setIsMemberModalOpen(false);
+          setIsMemberFormOpen(false);
           fetchData();
         },
       },
@@ -535,7 +547,7 @@ export default function MoreMinimalGrid() {
               <Text style={styles.modalAddBtnText}>+ REGISTER NEW CLIENT COMPANY</Text>
             </TouchableOpacity>
 
-            {editingClientId !== null || (clientCompany && isClientModalOpen) ? (
+            {isClientFormOpen ? (
               <View style={styles.modalFormCard}>
                 <Text style={styles.modalFormTitle}>{editingClientId ? 'EDIT CLIENT' : 'ADD NEW CLIENT'}</Text>
 
@@ -559,9 +571,15 @@ export default function MoreMinimalGrid() {
                   <TextInput style={styles.formInput} placeholder="+91 98765 43210" placeholderTextColor="#9CA3AF" value={clientPhone} onChangeText={setClientPhone} />
                 </View>
 
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSaveClient}>
-                  <Text style={styles.saveBtnText}>{editingClientId ? 'UPDATE CLIENT' : 'SAVE CLIENT'}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                  <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveClient}>
+                    <Text style={styles.saveBtnText}>{editingClientId ? 'UPDATE CLIENT' : 'SAVE CLIENT'}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => setIsClientFormOpen(false)}>
+                    <Text style={styles.secondaryBtnText}>CANCEL</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {editingClientId && (
                   <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteClient}>
@@ -618,7 +636,7 @@ export default function MoreMinimalGrid() {
               <Text style={styles.modalAddBtnText}>+ ADD NEW TEAM MEMBER</Text>
             </TouchableOpacity>
 
-            {editingMemberId !== null || (memberName && isMemberModalOpen) ? (
+            {isMemberFormOpen ? (
               <View style={styles.modalFormCard}>
                 <Text style={styles.modalFormTitle}>{editingMemberId ? 'EDIT TEAM MEMBER' : 'ADD NEW MEMBER'}</Text>
 
@@ -633,13 +651,24 @@ export default function MoreMinimalGrid() {
                 </View>
 
                 <View style={styles.formGroup}>
+                  <Text style={styles.formLabel}>HOURLY RATE (INR)</Text>
+                  <TextInput style={styles.formInput} placeholder="e.g. 1500" placeholderTextColor="#9CA3AF" value={memberHourlyRate} onChangeText={setMemberHourlyRate} keyboardType="numeric" />
+                </View>
+
+                <View style={styles.formGroup}>
                   <Text style={styles.formLabel}>AVATAR EMOJI</Text>
                   <TextInput style={styles.formInput} placeholder="👨‍💻" placeholderTextColor="#9CA3AF" value={memberAvatar} onChangeText={setMemberAvatar} />
                 </View>
 
-                <TouchableOpacity style={styles.saveBtn} onPress={handleSaveMember}>
-                  <Text style={styles.saveBtnText}>{editingMemberId ? 'UPDATE MEMBER' : 'SAVE MEMBER'}</Text>
-                </TouchableOpacity>
+                <View style={{ flexDirection: 'row', gap: 8, marginTop: 4 }}>
+                  <TouchableOpacity style={[styles.saveBtn, { flex: 1 }]} onPress={handleSaveMember}>
+                    <Text style={styles.saveBtnText}>{editingMemberId ? 'UPDATE MEMBER' : 'SAVE MEMBER'}</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={() => setIsMemberFormOpen(false)}>
+                    <Text style={styles.secondaryBtnText}>CANCEL</Text>
+                  </TouchableOpacity>
+                </View>
 
                 {editingMemberId && (
                   <TouchableOpacity style={styles.deleteBtn} onPress={handleDeleteMember}>
@@ -1043,6 +1072,18 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   saveBtnText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
+  secondaryBtn: {
+    height: 46,
+    paddingHorizontal: 16,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: '#94A3B8',
+    marginTop: 4,
+  },
+  secondaryBtnText: { color: '#475569', fontSize: 11, fontWeight: '900', letterSpacing: 1 },
   deleteBtn: {
     height: 40,
     backgroundColor: '#FEE2E2',

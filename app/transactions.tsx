@@ -156,7 +156,7 @@ export default function Transactions() {
       return;
     }
 
-    const payload = {
+    const payload: any = {
       type,
       description,
       amount: amtNum,
@@ -172,12 +172,24 @@ export default function Transactions() {
     try {
       if (editingId) {
         console.log(`[SUPABASE UPDATE] Updating transaction ID: ${editingId}...`);
-        const { error } = await supabase.from('transactions').update(payload).eq('id', editingId);
+        let { error } = await supabase.from('transactions').update(payload).eq('id', editingId);
+        if (error && error.message?.includes('payment_status')) {
+          console.warn('[SUPABASE WARN] payment_status column missing on DB, retrying without it...');
+          delete payload.payment_status;
+          const retry = await supabase.from('transactions').update(payload).eq('id', editingId);
+          error = retry.error;
+        }
         if (error) throw error;
         Alert.alert('Success', 'Transaction updated!');
       } else {
         console.log(`[SUPABASE INSERT] Saving new ${type} transaction...`);
-        const { error } = await supabase.from('transactions').insert(payload);
+        let { error } = await supabase.from('transactions').insert(payload);
+        if (error && error.message?.includes('payment_status')) {
+          console.warn('[SUPABASE WARN] payment_status column missing on DB, retrying without it...');
+          delete payload.payment_status;
+          const retry = await supabase.from('transactions').insert(payload);
+          error = retry.error;
+        }
         if (error) throw error;
         Alert.alert('Success', 'Transaction recorded!');
       }
