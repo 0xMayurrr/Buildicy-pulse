@@ -12,11 +12,14 @@ import {
   RefreshControl,
   Dimensions,
   Platform,
+  Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
 import * as Updates from 'expo-updates';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { COLORS, formatCurrency, formatFullCurrency, Client, Member, Transaction, Project } from '../data/demo';
 import { supabase, subscribeToRealtimeChanges } from '../lib/supabase';
 import { BuildicyLogo } from '../components/BuildicyLogo';
@@ -70,6 +73,68 @@ export default function MoreMinimalGrid() {
 
   // Settings State
   const [currencySymbol, setCurrencySymbol] = useState('₹');
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+
+  useEffect(() => {
+    async function loadBiometricSetting() {
+      try {
+        const storedVal = await AsyncStorage.getItem('BUILDICY_BIOMETRIC_ENABLED');
+        setBiometricEnabled(storedVal === 'true');
+      } catch (e) {
+        console.log('[BIOMETRIC READ ERROR]', e);
+      }
+    }
+    loadBiometricSetting();
+  }, []);
+
+  async function handleToggleBiometric(targetVal: boolean) {
+    if (targetVal) {
+      try {
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if (!hasHardware) {
+          Alert.alert('Hardware Unsupported', 'Your device does not support fingerprint or biometric authentication.');
+          return;
+        }
+        if (!isEnrolled) {
+          Alert.alert('No Fingerprint Registered', 'Please register a fingerprint or Face ID in your device system settings first.');
+          return;
+        }
+
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Confirm fingerprint to enable App Lock',
+          cancelLabel: 'Cancel',
+        });
+
+        if (result.success) {
+          await AsyncStorage.setItem('BUILDICY_BIOMETRIC_ENABLED', 'true');
+          setBiometricEnabled(true);
+          Alert.alert('App Lock Enabled 🔒', 'Buildicy Pulse is now secured. You will be prompted to scan your fingerprint whenever opening the app.');
+        } else {
+          Alert.alert('Authentication Canceled', 'Fingerprint lock was not enabled.');
+        }
+      } catch (err: any) {
+        Alert.alert('Error', err.message || 'Failed to setup fingerprint lock');
+      }
+    } else {
+      try {
+        const result = await LocalAuthentication.authenticateAsync({
+          promptMessage: 'Scan fingerprint to disable App Lock',
+          cancelLabel: 'Cancel',
+        });
+
+        if (result.success) {
+          await AsyncStorage.setItem('BUILDICY_BIOMETRIC_ENABLED', 'false');
+          setBiometricEnabled(false);
+          Alert.alert('App Lock Disabled', 'Fingerprint authentication has been turned off.');
+        }
+      } catch (err: any) {
+        await AsyncStorage.setItem('BUILDICY_BIOMETRIC_ENABLED', 'false');
+        setBiometricEnabled(false);
+      }
+    }
+  }
 
   async function fetchData() {
     console.log('[SUPABASE FETCH] [More] Querying clients, members, projects & transactions...');
@@ -508,6 +573,14 @@ export default function MoreMinimalGrid() {
               <Text style={styles.gridLabel}>Settings</Text>
             </TouchableOpacity>
 
+            {/* Fingerprint / App Lock */}
+            <TouchableOpacity style={styles.gridItem} onPress={() => setIsSettingsModalOpen(true)} activeOpacity={0.75}>
+              <View style={[styles.circleIconBadge, { backgroundColor: biometricEnabled ? '#7C3AED' : '#4B5563' }]}>
+                <Ionicons name="finger-print" size={24} color="#FFFFFF" />
+              </View>
+              <Text style={styles.gridLabel}>{biometricEnabled ? 'Lock ON' : 'App Lock'}</Text>
+            </TouchableOpacity>
+
             {/* Check Updates */}
             <TouchableOpacity style={styles.gridItem} onPress={handleCheckForUpdates} activeOpacity={0.75}>
               <View style={[styles.circleIconBadge, { backgroundColor: '#10B981' }]}>
@@ -902,6 +975,26 @@ export default function MoreMinimalGrid() {
               <Text style={styles.modalFormTitle}>ACTIVE USER SESSION</Text>
               <Text style={{ fontSize: 13, fontWeight: '800', color: '#7C3AED' }}>{userEmail}</Text>
               <Text style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>Connected to Supabase PostgreSQL Database</Text>
+            </View>
+
+            <View style={styles.modalFormCard}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
+                <View style={{ flex: 1, paddingRight: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+                    <Ionicons name="finger-print" size={18} color="#7C3AED" />
+                    <Text style={styles.modalFormTitle}>FINGERPRINT & BIOMETRIC LOCK</Text>
+                  </View>
+                  <Text style={{ fontSize: 10, color: '#64748B', marginTop: 2 }}>
+                    Require fingerprint / Face ID scan every time Buildicy Pulse is opened.
+                  </Text>
+                </View>
+                <Switch
+                  value={biometricEnabled}
+                  onValueChange={handleToggleBiometric}
+                  trackColor={{ false: '#374151', true: '#7C3AED' }}
+                  thumbColor={biometricEnabled ? '#A855F7' : '#9CA3AF'}
+                />
+              </View>
             </View>
 
             <View style={styles.modalFormCard}>

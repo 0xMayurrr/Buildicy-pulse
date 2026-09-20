@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
+import * as LocalAuthentication from 'expo-local-authentication';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { Ionicons } from '@expo/vector-icons';
 import { BuildicyLogo } from './BuildicyLogo';
@@ -20,6 +22,70 @@ export function AuthScreen() {
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [hasBiometricLogin, setHasBiometricLogin] = useState(false);
+
+  useEffect(() => {
+    async function checkSavedBiometric() {
+      try {
+        const bioEnabled = await AsyncStorage.getItem('BUILDICY_BIOMETRIC_ENABLED');
+        const savedEmail = await AsyncStorage.getItem('BUILDICY_SAVED_EMAIL');
+        const savedPassword = await AsyncStorage.getItem('BUILDICY_SAVED_PASSWORD');
+
+        if (savedEmail) setEmail(savedEmail);
+
+        const hasHardware = await LocalAuthentication.hasHardwareAsync();
+        const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+
+        if ((bioEnabled === 'true' || savedEmail) && hasHardware && isEnrolled) {
+          setHasBiometricLogin(true);
+          // Automatically popup fingerprint prompt on AuthScreen mount
+          setTimeout(() => {
+            triggerBiometricLogin(savedEmail || email, savedPassword || password);
+          }, 400);
+        }
+      } catch (err) {
+        console.log('[AUTH BIOMETRIC INIT ERROR]', err);
+      }
+    }
+    checkSavedBiometric();
+  }, []);
+
+  async function triggerBiometricLogin(targetEmail?: string, targetPassword?: string) {
+    try {
+      const e = targetEmail || email || (await AsyncStorage.getItem('BUILDICY_SAVED_EMAIL'));
+      const p = targetPassword || password || (await AsyncStorage.getItem('BUILDICY_SAVED_PASSWORD'));
+
+      const result = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Unlock Buildicy Pulse Dashboard',
+        cancelLabel: 'Use Password',
+        fallbackLabel: 'Use Password',
+      });
+
+      if (result.success) {
+        if (e && p) {
+          setLoading(true);
+          console.log(`[BIOMETRIC LOGIN] Fingerprint verified for: ${e}. Signing into Supabase...`);
+          const { error } = await supabase.auth.signInWithPassword({
+            email: e,
+            password: p,
+          });
+          if (error) throw error;
+        } else {
+          Alert.alert(
+            'Fingerprint Verified 🔒',
+            'Please enter your password once to complete fingerprint linking for quick 1-tap logins.'
+          );
+        }
+      } else {
+        console.log('[BIOMETRIC LOGIN] Canceled or failed');
+      }
+    } catch (err: any) {
+      console.error('[BIOMETRIC LOGIN ERROR]', err.message || err);
+      Alert.alert('Fingerprint Login Error', err.message || 'Could not sign in with fingerprint.');
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleAuth() {
     if (!email || !password) {
@@ -41,16 +107,11 @@ export function AuthScreen() {
 
         if (error) throw error;
 
-        console.log('[SUPABASE AUTH SUCCESS] Account creation response received from Supabase:', {
-          userId: data.user?.id,
-          hasSession: !!data.session,
-        });
-
         if (data.session) {
-          console.log('[SUPABASE AUTH] Direct session established upon registration.');
+          await AsyncStorage.setItem('BUILDICY_SAVED_EMAIL', cleanEmail);
+          await AsyncStorage.setItem('BUILDICY_SAVED_PASSWORD', password);
           Alert.alert('Success', 'Account created and signed in successfully!');
         } else {
-          console.log('[SUPABASE AUTH] Account created. Switching mode to Sign In for immediate login.');
           Alert.alert(
             'Account Created!',
             'Your account has been registered in Supabase. You can now tap SIGN IN below with your credentials!',
@@ -67,7 +128,11 @@ export function AuthScreen() {
 
         if (error) throw error;
 
-        console.log(`[SUPABASE AUTH SUCCESS] Signed in successfully as: ${data.user?.email} (ID: ${data.user?.id})`);
+        // Save credentials locally for seamless fingerprint logins
+        await AsyncStorage.setItem('BUILDICY_SAVED_EMAIL', cleanEmail);
+        await AsyncStorage.setItem('BUILDICY_SAVED_PASSWORD', password);
+
+        console.log(`[SUPABASE AUTH SUCCESS] Signed in successfully as: ${data.user?.email}`);
       }
     } catch (err: any) {
       console.error('[SUPABASE AUTH ERROR]', err.message || err);
@@ -162,6 +227,18 @@ export function AuthScreen() {
                 </Text>
               )}
             </TouchableOpacity>
+
+            {hasBiometricLogin && !isSignUp && (
+              <TouchableOpacity
+                style={styles.bioButton}
+                onPress={() => triggerBiometricLogin()}
+                disabled={loading}
+                activeOpacity={0.8}
+              >
+                <Ionicons name="finger-print" size={20} color="#7C3AED" />
+                <Text style={styles.bioButtonText}>SIGN IN WITH FINGERPRINT</Text>
+              </TouchableOpacity>
+            )}
 
             <TouchableOpacity
               style={styles.toggle}
@@ -272,6 +349,23 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '900',
     fontSize: 13,
+    letterSpacing: 1,
+  },
+  bioButton: {
+    height: 48,
+    backgroundColor: 'rgba(124, 58, 237, 0.1)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+    gap: 8,
+    borderWidth: 2,
+    borderColor: '#7C3AED',
+    marginTop: 4,
+  },
+  bioButtonText: {
+    color: '#7C3AED',
+    fontWeight: '900',
+    fontSize: 12,
     letterSpacing: 1,
   },
   toggle: {

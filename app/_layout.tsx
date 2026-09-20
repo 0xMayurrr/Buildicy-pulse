@@ -4,8 +4,10 @@ import { StatusBar } from 'expo-status-bar';
 import { View, Text, StyleSheet, ActivityIndicator, Alert } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import * as Updates from 'expo-updates';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { AuthScreen } from '../components/AuthScreen';
+import { BiometricLockScreen } from '../components/BiometricLockScreen';
 import { SleekFloatingTabBar } from '../components/SleekFloatingTabBar';
 
 import { BuildicyLogo } from '../components/BuildicyLogo';
@@ -27,6 +29,7 @@ export default function RootLayout() {
   const [session, setSession] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [messageIndex, setMessageIndex] = useState(0);
+  const [isBiometricLocked, setIsBiometricLocked] = useState(false);
 
   // Automatic OTA Update check on app launch
   useEffect(() => {
@@ -63,20 +66,42 @@ export default function RootLayout() {
   }, []);
 
   useEffect(() => {
-    console.log('[APP INIT] Checking existing Supabase session...');
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session) {
-        console.log(`[SUPABASE AUTH SESSION] Active session found for user: ${session.user.email}`);
-      } else {
-        console.log('[SUPABASE AUTH SESSION] No active session found. Presenting AuthScreen.');
+    console.log('[APP INIT] Checking existing Supabase session and biometric preferences...');
+    
+    async function initAuthAndBiometric() {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session) {
+          console.log(`[SUPABASE AUTH SESSION] Active session found for user: ${session.user.email}`);
+          const bioPref = await AsyncStorage.getItem('BUILDICY_BIOMETRIC_ENABLED');
+          if (bioPref === 'true') {
+            console.log('[BIOMETRIC APP GUARD] Biometric lock is ENABLED. Requiring fingerprint...');
+            setIsBiometricLocked(true);
+          }
+        } else {
+          console.log('[SUPABASE AUTH SESSION] No active session found. Presenting AuthScreen.');
+        }
+        setSession(session);
+      } catch (err: any) {
+        console.error('[APP INIT ERROR]', err);
+      } finally {
+        setLoading(false);
+        SplashScreen.hideAsync();
       }
-      setSession(session);
-      setLoading(false);
-      SplashScreen.hideAsync(); // Hide Expo native splash screen immediately
-    });
+    }
 
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+    initAuthAndBiometric();
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log(`[AUTH STATE CHANGE] Event: ${event} | User: ${session?.user?.email || 'Logged Out'}`);
+      if (event === 'SIGNED_IN' && session) {
+        const bioPref = await AsyncStorage.getItem('BUILDICY_BIOMETRIC_ENABLED');
+        if (bioPref === 'true') {
+          setIsBiometricLocked(true);
+        }
+      } else if (event === 'SIGNED_OUT') {
+        setIsBiometricLocked(false);
+      }
       setSession(session);
       setLoading(false);
       SplashScreen.hideAsync();
@@ -106,6 +131,21 @@ export default function RootLayout() {
         <StatusBar style="light" backgroundColor="#0B0F17" />
         <AuthScreen />
       </>
+    );
+  }
+
+  if (isBiometricLocked) {
+    return (
+      <BiometricLockScreen
+        onUnlockSuccess={() => {
+          console.log('[BIOMETRIC LOCK UNLOCKED] Access granted to dashboard');
+          setIsBiometricLocked(false);
+        }}
+        onFallbackToLogin={() => {
+          setIsBiometricLocked(false);
+          setSession(null);
+        }}
+      />
     );
   }
 
